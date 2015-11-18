@@ -1,5 +1,6 @@
 /**
  * Created by sdm on 14-1-18.
+ * update by xwm on 15-10-18.
  * 数据存储类
  *
  * 使用 数据库 存储
@@ -90,7 +91,11 @@
     model.addTag = function (tagname, description) {
         var tags = model.getTags();
         tags[name] = {desc: description};
-        saveData('tags', tags);
+        var reg=/\s+/g;
+        if(tag.name.replace(reg," ")!=' '){
+        	saveData('tags', tags);
+        }
+        
     }
 
     //删除标签
@@ -124,49 +129,53 @@
 
     //添加主机
     model.addHost = function (info) {
-        var hosts = loadData('hosts');
-        var c = loadData('hosts-count');
-        if (!c) {
-            c = 0;
-        }
-        if (!hosts) {
-            hosts = {};
-        }
-        var id = 1 + c;
-        
-        //去重
-        var result = []
-        var mark=0;
-        for (var hid in hosts) {
-            if (hosts.hasOwnProperty(hid)) {
-                result.push(hosts[hid]);
-            }
-        }
-        for(var j=0; j<result.length; j++){
-        	if(result[j].domain == info.domain){
-        		mark=1;
-        		break;
-        	}
-        }
-        
-        if(0==mark){
-            info.id = id;
-
-            saveData('hosts-count', id);
-
-            hosts[id] = info;
-
-            saveData('hosts', hosts);
-        }
-        
-        //修改之后 更新
-        loadsIp()
-        //自动启动
-        if(info.status){
-        	model.enableHosts([id])
-        }
-
-        model.reload();
+    	if( info.id ){
+            model.updateHost(info);
+	    } else {
+	        var hosts = loadData('hosts');
+	        var c = loadData('hosts-count');
+	        if (!c) {
+	            c = 0;
+	        }
+	        if (!hosts) {
+	            hosts = {};
+	        }
+	        var id = 1 + c;
+	        
+	        //去重
+	        var result = []
+	        var mark=0;
+	        for (var hid in hosts) {
+	            if (hosts.hasOwnProperty(hid)) {
+	                result.push(hosts[hid]);
+	            }
+	        }
+	        for(var j=0; j<result.length; j++){
+	        	if(result[j].domain == info.domain){
+	        		mark=1;
+	        		break;
+	        	}
+	        }
+	        
+	        if(0==mark){
+	            info.id = id;
+	
+	            saveData('hosts-count', id);
+	
+	            hosts[id] = info;
+	
+	            saveData('hosts', hosts);
+	        }
+	        
+	        //修改之后 更新
+	        loadsIp()
+	        //自动启动
+	        if(info.status){
+	        	model.enableHosts([id])
+	        }
+	
+	        model.reload();
+	    }
     }
 
 
@@ -352,8 +361,9 @@
     //开关,启用暂停
     model.setStatus = function (checked) {
         saveData('status',checked);
+        default_mode = 'SYSTEM';
+        saveData('default_mode', default_mode);
         this.checked = checked;
-
 
         var script = '';
 
@@ -362,26 +372,33 @@
             var results=model.getEnabledHosts();
             for(var i =0;i<results.length;i++){
                 var info=results[i];
+                var ip = info.ip;
+                var port = 80;
 
                 if(info.domain.indexOf('*')!=-1){
                     script += '}else if(shExpMatch(host,"' + info.domain + '")){';
-                    script += 'if(shExpMatch(url,"https://' + info.domain + '/*")){return "PROXY ' + info.ip + ':443; DIRECT"}else{return "PROXY ' + info.ip + ':80; DIRECT"};';
                 }else if(info.domain.indexOf(':')!=-1){
                     var t=info.domain.split(':');
+                    port = t[1];
                     script += '}else if(shExpMatch(url,"http://' + info.domain + '/*")){';
-                    script += 'return "PROXY ' + info.ip + ':'+t[1]+'; DIRECT";';
                 }else{
                     script += '}else if(host == "' + info.domain + '"){';
-                    script += 'if(shExpMatch(url,"https://' + info.domain + '/*")){return "PROXY ' + info.ip + ':443; DIRECT"}else{return "PROXY ' + info.ip + ':80; DIRECT"};';
                 }
+
+                if( info.ip.indexOf(':') > -1 ){
+                    var ip_port = info.ip.split(':');
+                    ip = ip_port[ip_port.length - 2];
+                    port = ip_port[ip_port.length - 1];
+                }
+                script += 'return "PROXY ' + ip + ':'+ port +'; DIRECT";';
 
                 script+="\n";
 
             }
             var data='function FindProxyForURL(url,host){ \n if(shExpMatch(url,"http:*") || shExpMatch(url,"https:*")){if(isPlainHostName(host)){return "DIRECT";' +
-                script + '}else{return "DIRECT";}}else{return "DIRECT";}}';
+                script + '}else{return "'+ default_mode +'";}}else{return "SYSTEM";}}';
 
-            console.log('pac:',data);
+
             chrome.proxy.settings.set({
                 value: {
                     mode: 'pac_script',
@@ -391,17 +408,18 @@
                 },
                 scope: 'regular'
             }, function(){
-                console.log('set pac scripts result:',arguments);
+                //console.log('set pac scripts result:',arguments);
             });
-            $('#msg').html('set :' + script);
+            // $('#msg').html('set :' + script);
         } else {
             chrome.proxy.settings.set({
                 value: {
-                    mode: 'system'
+                    //mode: 'system'
+                    // mode: 'direct'
+                    mode: default_mode.toLowerCase()
                 },
                 scope: 'regular'
             }, $.noop);
-
         }
 
     }
@@ -437,8 +455,18 @@
         model.reload();
     }
 
-    model.updateHost = function (id) {
+    model.updateHost = function (info) {
+        var hosts = loadData('hosts');
+        var origin_status = (hosts[info.id]).status;
 
+        info.status = 0;
+        hosts[info.id] = info;
+        saveData('hosts', hosts);
+        if( origin_status ){
+            model.enableHosts([info.id]);
+        }
+        
+        model.reload();
     }
 
 

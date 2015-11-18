@@ -9,6 +9,7 @@ $(function () {
     var ips = []
     var domains = []
 
+
     //@todo 支持回调 增量更新
     model.setAutoIp(function (all) {
         ips.length = 0;
@@ -76,8 +77,7 @@ $(function () {
 
         render_search_result(result);
     }
-
-    setTimeout(search)
+    setTimeout(search);
 
     function render_label_filter() {
         var tags = model.countTags();
@@ -138,38 +138,22 @@ $(function () {
 
     setTimeout(render_label_filter);
 
-    function render_search_result(result) {
-
-
-        var tbody = $('#tbody-hosts');
-        tbody.find('tr').remove();
-        //@todo 改进使用 模板引擎
+    function render_search_result(result, isBulk) {
+        var tbody = $('#tbody-hosts'),
+            html = '';
+        isBulk = typeof isBulk === 'undefined' ? tbody.is('.needBulk') : isBulk;
         if (result.length == 0) {
-            tbody.append('<tr><td colspan="3">没有结果</td></tr>');
+            html = '<tr><td colspan="6">尚无记录</td></tr>';
         } else {
             $(result).each(function (i, v) {
-                var tags = '<td>&nbsp;</td>';
-                var note = '<td>&nbsp;</td>';
-                if (v.tags) {
-                    tags = '<td>' + (v.tags.join(' , ')) + '</td>';
-                }
-                if (v.note) {
-                	note = '<td>' + cutString(v.note,30) + '</td>';
-                }
-
-                var status = 'status-enabled';
-                if (!v.status) {
-                    status = 'status-disabled';
-                }
-                //<a href="#" data-toggle="tooltip" title="" data-original-title="Default tooltip">you probably</a>
-
-                //@todo 激活点击图标就ok了
-                tbody.append('<tr  title="备注:' + v.note + ' 更新时间:' + v.uptime + '"   id="host-' + v.id + '" data-id="' + v.id + '"><td><input name="id[]" value="' + v.id + '" type="checkbox"></td><td><span data-status="'+ v.status+'"  data-id="' + v.id + '"  class="host-status glyphicon glyphicon-ok ' + status + '"  ></span></td></td><td>' + v.ip + '</td><td>' + v.domain + '</td>' + tags + note + '</tr>');
-
-
-            })
+                v.tags = v.tags ? (v.tags.join(', ')) : '';
+                v.status_class = v.status ? 'status-enabled' : 'status-disabled';
+            });
+            html = $('#host-item').extendObj(result);
+            tbody.html( html );
         }
     }
+
     
     /**参数说明：
      * 根据长度截取先使用字符串，超长部分追加…
@@ -217,8 +201,10 @@ $(function () {
     }
 
     setTimeout(render_search_history);
+    
+
     function render_search_history() {
-        var last_search = model.getkws();
+    	var last_search = model.getkws();
         $('#menu li').remove();
         $(last_search).each(function (k, v) {
             $('#menu').append('<li><a href="#" data-kw="' + v + '">' + v + '</a></li>');
@@ -227,7 +213,12 @@ $(function () {
     }
 
     var labels = $('#menu')
-
+    var last_search = model.getkws();
+	$('#lastSearch').click(function () {
+        $('#input_search').val(last_search[0].replace(/[ ]/g,"")).change();
+        last_search.splice(0,1);
+	})
+	
     labels.on('click', 'a', function () {
 
         var kw = $(this).data('kw');
@@ -250,114 +241,185 @@ $(function () {
 
     }
 
-    $('#tbody-hosts ').on('change', 'input[name="id[]"]', function () {
-        select_one(this.value)
-        var tr = $(this).parents('tr');
-        if ($(this).prop('checked')) {
-            tr.addClass('success')
-        } else {
-            tr.removeClass('success')
+    $('#tbody-hosts').on('click', 'tr', function (e) {
+        var $item = $(this);
+        
+        if( $('#tbody-hosts').is('.needBulk') ){
+            if( e.target.tagName.toLowerCase() !== 'input' ){
+                if( e.target.tagName.toLowerCase() === 'a' ){
+                    $this = $(e.target);
+                    if( $this.is('.delete') ){
+                        if( confirm('确认删除该记录？') ){
+                            model.removeHost($this.data('id'));
+                            $item.remove();
+                        }
+                    } else {// Edit
+                    	
+                        var info = {
+                            id: $item.data('id'),
+                            ip: $item.data('ip'),
+                            domain: $item.data('domain'),
+                            tag: $item.find('.tags').text().split(', '),
+                            note: $item.find('.note').text()
+                        }
+                        
+                        var $addForm = $('#addForm'); 
+                        //addForm.reset();
+                        $('#list').removeClass('in active');
+                        $addForm.addClass('in active').find(':input').each(function(){
+                            var $input = $(this);
+                            var name = $input.attr('name') || $input.attr('id');
+                            if( name ){
+                                if( name === 'labels[]' ){
+                                    if( info.tag.indexOf($input.val()) > -1 ){
+                                        this.checked = true;
+                                    }
+                                } else $input.val(info[name]);
+                            }
+                        });
+                    }
+                    return false;
+                } else if( $(e.target).children('input').length ){
+                    var c = $('input', this);
+                    setTimeout(function () {
+                        c.prop('checked', !c.prop('checked')).change();
+                    });
+                }
+            }
+        } else if(e.target.tagName.toLowerCase() !== 'a') {
+            $('.host-status', this).trigger('click');
+        }
+    });
+    
+    $('#tbody-hosts').on('click', 'a.host-status', function(){
+        var status_obj = $(this);
+        var domain = status_obj.data('domain');
+        var status = status_obj.data('status');
+        var id = status_obj.data('id');
+        var ids=[id];
+        if(status=='1'){ // 禁用
+            render_status(ids, 0);
+            model.disableHosts(ids);
+            search('');
+        }else{ // 启用
+            $('#tbody-hosts').find('.status-enabled').each(function(){ // 禁用相同 domain 的项
+                if( $(this).data('domain') === domain ){
+                    var another_id = $(this).data('id');
+                    render_status([another_id], 0);
+                    model.disableHosts([another_id]);
+                }
+            });
+
+            var enables = model.getEnabledHosts();
+            if( enables.length ){
+                for (var i = 0, len = enables.length; i < len; i++) {
+                    if (enables[i].domain === domain) {
+                        model.disableHosts([enables[i].id]);
+                    }
+                };
+            }
+
+            render_status(ids, 1);
+            model.enableHosts(ids);
+            search('');
         }
         return false;
     });
-    $('#tbody-hosts').on('click', 'tr', function () {
+/*    $('#tbody-hosts').on('click', 'tr', function () {
         var c = $('input', this)
         setTimeout(function () {
             c.prop('checked', !c.prop('checked')).change();
         })
         return false;
 
-    });
+    });*/
     $('#but-save').click(function () {
+        // console.log('普通添加模式');
+        var info = {
+            'id': Number($('#item-id').val()),
+            'ip': $('#ip').val(),
+            'domain': $('#domain').val(),
+            'note': $('#note').val(),
+            'tags': [],
+            'status':1,
+            'uptime': new Date().Format("yyyy-MM-dd hh:mm:ss")
+        };
+        var add_tags = $('#add_labels').val().split(',');
+        $(add_tags).each(function (i, v) {
+            if (v) {
+                info.tags.push(v);
+            }
+        });
 
+        $('#div_labels input[type="checkbox"]:checked').each(function () {
+            info.tags.push(this.value);
+        });
+        if(info['ip']!='' && info['domain']!=''){
+        	model.addHost(info);
+        }
+        
+        search('');
+        $('#listBtn').trigger('click');
+    })
+   $('#but-bulk-save').click(function () {
         //保存操作
-        if ($('#add').is(":visible")) {
-            console.log('普通添加模式');
-            var info = {
-                'ip': $('#ip').val(),
-                'domain': $('#domain').val(),
-                'note': $('#note').val(),
-                'tags': [],
-                'status':1,
-                'uptime': new Date().Format("yyyy-MM-dd hh:mm:ss")
-            };
-            var add_tags = $('#add_labels').val().split(',');
-            $(add_tags).each(function (i, v) {
-                if (v) {
-                    info.tags.push(v);
-                }
-
-            })
-           
-
-            $('#div_labels input[name="labels[]"]:checked').each(function () {
-
-                info.tags.push(this.value);
-            })
-            
-            model.addHost(info);
-            $('#dlg_add').modal('hide')
-            //重新显示列表
-            setTimeout(search, 0);
-
-        } else {
-            console.log('批量添加模式');
-            var infos = $('#quick-add').val();
-            var infos = infos.split("\n");
-            //var regexp = /#\s*@[^#]*\s*#*/gi;
-            var reg=/\s+/g;
-            var tag='';
-        	var re =  /#*([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])/gi;
-            var strRegex = "^((https|http|ftp|rtsp|mms)?://)?(([0-9a-z_!~*'().&=+$%-]+: )?[0-9a-z_!~*'().&=+$%-]+@)?(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-z_!~*'()-]+\.)*([0-9a-z][0-9a-z-]{0,61})?[0-9a-z]\.[a-z]{2,6})(:[0-9]{1,4})?((/?)|(/[0-9a-z_!~*'().;?:@&=+$,%#-]+)+/?)$";  
-            for(var i=0;i<infos.length;i++){
-            	
-            	infos[i] = infos[i].replace(reg," ");
-            	if(null == infos[i].match(re)){
-            		infos[i] = infos[i].replace(/@/gi,' ');
-            		infos[i] = infos[i].replace(/#/gi,'# ');
-            		
-            		if(' ' == infos[i][0]){
-                		infos[i] = infos[i].substr(1);
-                	}
-            		if('#' == infos[i].replace(reg," ").substr(0,1)){
-            			if(infos[i].length>2){
-            				if(' ' == infos[i].substr(1,2)){
-                				infos[i] = '# ' + infos[i].substr(1);
-                				
-                			}else{
-                				infos[i] = '# ' + infos[i].substr(0);
-                				
-                			}
-            				tag = infos[i].replace(reg," ").split(" ")[2];
-            			}else{
-            				tag = '';
-            			}
-            			
-            		}
-            		
-            		
-                }
-         
-            	
-            	if(' ' == infos[i][0]){
+        console.log('批量添加模式');
+        var infos = $('#quick-add').val();
+        var infos = infos.split("\n");
+        //var regexp = /#\s*@[^#]*\s*#*/gi;
+        var reg=/\s+/g;
+        var tag='';
+    	var re =  /#*([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.([0-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])/gi;
+        var strRegex = "^((https|http|ftp|rtsp|mms)?://)?(([0-9a-z_!~*'().&=+$%-]+: )?[0-9a-z_!~*'().&=+$%-]+@)?(([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-z_!~*'()-]+\.)*([0-9a-z][0-9a-z-]{0,61})?[0-9a-z]\.[a-z]{2,6})(:[0-9]{1,4})?((/?)|(/[0-9a-z_!~*'().;?:@&=+$,%#-]+)+/?)$";  
+        for(var i=0;i<infos.length;i++){
+        	
+        	infos[i] = infos[i].replace(reg," ");
+        	if(null == infos[i].match(re)){
+        		infos[i] = infos[i].replace(/@/gi,' ');
+        		infos[i] = infos[i].replace(/#/gi,'# ');
+        		
+        		if(' ' == infos[i][0]){
             		infos[i] = infos[i].substr(1);
             	}
-        		if(null != infos[i].match(re)){
-        			infos[i] = infos[i].replace(/#\s*/,"#");
-        		}
-        		infos[i] = infos[i].split(" ");
-        		//domain
-        		var domains='';
-        		for(var j=0;j<infos[i].length;j++){    			
-    				if(null != infos[i][j].match(strRegex) &&  null == infos[i][j].match(re)){
-    					domains += ' ' + infos[i][j];
+        		if('#' == infos[i].replace(reg," ").substr(0,1)){
+        			if(infos[i].length>2){
+        				if(' ' == infos[i].substr(1,2)){
+            				infos[i] = '# ' + infos[i].substr(1);
+            				
+            			}else{
+            				infos[i] = '# ' + infos[i].substr(0);
+            				
+            			}
+        				tag = infos[i].replace(reg," ").split(" ")[2];
+        			}else{
+        				tag = '';
         			}
+        			
         		}
-        		//notes
-        		var notes='';
-        		for(var j=0;j<infos[i].length;j++){    			
-    				if((infos[i][j] && '#' != infos[i][j] && null == infos[i][j].match(strRegex) && null == infos[i][j].match(re))|| ' ' == infos[i][j]){
-    					notes += ' ' + infos[i][j];
+        		
+        		
+            }
+     
+        	
+        	if(' ' == infos[i][0]){
+        		infos[i] = infos[i].substr(1);
+        	}
+    		if(null != infos[i].match(re)){
+    			infos[i] = infos[i].replace(/#\s*/,"#");
+    		}
+    		infos[i] = infos[i].split(" ");
+    		//domain
+    		var domains='';
+    		for(var j=0;j<infos[i].length;j++){    			
+				if(null != infos[i][j].match(strRegex) &&  null == infos[i][j].match(re)){
+					domains += ' ' + infos[i][j];
+    			}
+    		}
+    		//notes
+    		var notes='';
+    		for(var j=0;j<infos[i].length;j++){    			
+				if((infos[i][j] && '#' != infos[i][j] && null == infos[i][j].match(strRegex) && null == infos[i][j].match(re))|| ' ' == infos[i][j]){
+					notes += ' ' + infos[i][j];
         			}
         		}
         		infos[i][1] = domains; 
@@ -370,40 +432,40 @@ $(function () {
             for(var i=0;i<infos.length;i++){
             	if(!infos[i][2]){
             		infos[i][2]='';
-            	}
-            	var domains = infos[i][1].split(' ');
-            	//alert(domains);
-            	for(var j=1;j<domains.length;j++){
-            		var info = {
-                            'ip': infos[i][0],
-                            'domain': domains[j],
-                            'note': infos[i][2],
-                            'tags': [],
-                            'status':1,
-                            'uptime': new Date().Format("yyyy-MM-dd hh:mm:ss")
-                        };
-                		
-                	var checked_tags = infos[i][3];
-                	info.tags.push(checked_tags);
-
-                	if(null != info.ip.match(re)){
-                			if('#' == info.ip[0]){
-                				info.ip = info.ip.substr(1);
-                				info.status = 0;
-                			}
-                				model.addHost(info);
-                				            	
-    	            }
+        	}
+        	var domains = infos[i][1].split(' ');
+        	//alert(domains);
+        	for(var j=1;j<domains.length;j++){
+        		var info = {
+                        'ip': infos[i][0],
+                        'domain': domains[j],
+                        'note': infos[i][2],
+                        'tags': [],
+                        'status':1,
+                        'uptime': new Date().Format("yyyy-MM-dd hh:mm:ss")
+                    };
             		
+            	var checked_tags = infos[i][3];
+            	if(checked_tags!=''){
+            		info.tags.push(checked_tags);
             	}
             	
-                    
-            }
-            $('#dlg_add').modal('hide')
-            //重新显示列表
-            setTimeout(search, 0);
-        }
 
+            	if(null != info.ip.match(re) && null != info.domain.match(strRegex)){
+            			if('#' == info.ip[0]){
+            				info.ip = info.ip.substr(1);
+            				info.status = 0;
+            			}
+            				model.addHost(info);
+            				            	
+	            }
+        		
+        	}
+        	
+                
+        }
+            search('');
+            $('#listBtn').trigger('click');
     })
     $('#input_search').change(function () {
         clearTimeout($(this).data('t'));
@@ -413,7 +475,7 @@ $(function () {
 
 
     $("#status").prop('checked', model.getStatus()).switchButton({}).change(function () {
-        model.setStatus(this.checked);
+    	model.setStatus(this.checked, $('#default').val());
     });
 
     $('#but_add').click(function () {
@@ -454,7 +516,7 @@ $(function () {
     	var hosts = model.getHosts();
         $('#tbody-hosts').tableExport(hosts,0);
     })
-    
+
     $('#but_export_file').click(function () {
     	var hosts = model.getHosts();
         $('#tbody-hosts').tableExport(hosts,1);

@@ -13,7 +13,7 @@
                
 				var el = this;
 					// Header
-					var tdData ="<br />";		
+					var tdData ="\r\n";		
 					//tdData = $.trim(tdData);
 					var tagname = [];
 					var sdata = [];
@@ -47,7 +47,7 @@
 										}else{
 											tdata += '#' + parseString($(this)) + ' '+ defaults.separator;
 										}
-									}else{
+									}else if(control != 7){
 										tdata += parseString($(this)) + ' '+ defaults.separator;
 									}
 								}
@@ -58,11 +58,11 @@
 						if(!in_array(tn,tagname)){
 							tagname[n] = tn;
 							sdata[n]=[];
-							sdata[n]['data'] = '#' + tn + '    ###################<br />' + tdata + '<br />';
+							sdata[n]['data'] = '#' + tn + '    ###################\r\n' + tdata + '\r\n';
 							n++;
 						}else{
 							var m = tagname.indexOf(tn);
-							sdata[m]['data'] += tdata + '<br />';
+							sdata[m]['data'] += tdata + '\r\n';
 						}
 						
 					});
@@ -104,7 +104,8 @@
 					//alert(tdData);
 					
 					if(0 == type){
-						document.write(tdData);
+						//document.write(tdData);
+						$("#exportArea").text(tdData);
 					}else{
 						/*var base64data = "base64," + $.base64.encode(tdData);
 						

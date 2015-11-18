@@ -10,6 +10,8 @@
 
     <link rel="stylesheet" href="/libs/jquery.switchButton.css">
     
+    <link rel="stylesheet" href="/css/style.css">
+    
     
 
 
@@ -21,7 +23,7 @@
     <script src="/libs/bootstrap3/js/bootstrap-typeahead.js"></script>
 
     <script src="/libs/jquery-ui.min.js"></script>
-    
+    <script src="/libs/tpl.js"></script>
     <!-- 导出txt -->
     <script src="/js/tableExport.js"></script>
     <script src="/libs/jquery.base64.js"></script>
@@ -52,6 +54,7 @@
 
     </style> -->
     <style>
+		a { text-decoration: none; color: #FFA200;}
  		.typeahead{
             z-index: 1999;
         }
@@ -68,41 +71,33 @@
         .status-disabled{
             color:#cccccc;
         }
+        .top-c1{display:inline;float:left;}
+		.top-c2{display:inline;float:left;margin-left: 56%;}
+		.top-c3{display:inline;float:right;margin-right: 1%;}
+        .clear{clear: both;height:6px}
     </style>
     
 </head>
-<body style=" ">
-<div style=" width: 600px;height:600px;-webkit-border-radius:3px;border: 1px solid #0088CC;">
-
+<body style="border:none;padding:4px 1%">
+<div style=" width: 600px;">
+<span class="top-c1"><strong>Host Switch Pro</strong></span>
+<span class="top-c2"><a href="/pages/option.html#list" target="_blank" title="管理">管理</a></span>
+<span class="input-group-btn top-c3" style="width: 100px">
+   <input id="status" type="checkbox" value="1" checked>
+</span>
+<div class="clear">&nbsp;</div>
 <div class="input-group"  >
 
-        <input id="input_search" class="form-control input-sm" placeholder="搜索:域名,ip,标签. 比如:web1或者web2 ip:192.或者tags:dev " value="">
-
+        <input id="input_search" class="form-control input-sm" placeholder="搜索:域名,ip,标签.比如:web1或者web2 ip:192.或者tags:dev " value="">
         <span class="input-group-btn">
-            <button type="button" class="btn btn-default dropdown-toggle  btn-sm" data-toggle="dropdown">
-                <span class="caret"></span>
-                <span class="sr-only">Toggle Dropdown</span>
-            </button>
+              <button type="button" class="btn btn-default dropdown-toggle  btn-sm" data-toggle="dropdown" id="lastSearch">
+                <span class="glyphicon glyphicon-arrow-left"></span>
+                <span class="sr-only">Last Search</span>
+              </button>
              <button type="button" id="btn_search" class="btn btn-default btn-sm">Search</button>
-
-
-              <ul class="dropdown-menu" id="menu" role="menu">
-                  <!--<li><a href="#">Action</a></li>-->
-                  <!--<li><a href="#">Another action</a></li>-->
-                  <!--<li><a href="#">Something else here</a></li>-->
-                  <!--<li class="divider"></li>-->
-                  <!--<li><a href="#">Separated link</a></li>-->
-              </ul>
-
-      </span>
-        <span class="input-group-btn" style="width: 100px">
-            <input id="status" type="checkbox" value="1" checked>
         </span>
-    <span class="input-group-btn"  >
 
-    <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#dlg_add">添加
-    </button>
-        </span>
+
 </div>
 
 <div >
@@ -128,14 +123,10 @@
 </script>
 
 
-<div style="height: 480px;overflow: auto">
-
-
-    <table id="main-table" class="table table-hover  table-condensed">
+<div style="overflow: auto">
+    <table id="main-table" class="table table-hover table-condensed">
         <thead>
-
         <tr>
-            <th width="20"><input id="select_all" type="checkbox"></th>
             <th width="20">&nbsp;</th>
             <th width="110">Ip</th>
             <th>domain</th>
@@ -143,112 +134,18 @@
             <th>备注</th>
         </tr>
         </thead>
-        <tbody id="tbody-hosts">
-
-        </tbody>
+        <tbody id="tbody-hosts"></tbody>
     </table>
-
-    <button id="but_del">remove</button>
-    <button id="but_enabled">enabled</button>
-    <button id="but_disabled">disabled</button>
-<!--     <button id="but_edit">edit</button> -->
-    <button id="but_export">export</button> 
+	<script id="host-item" type="text/template">
+        <tr id="host-{=id}" data-id="{=id}" data-domain="{=domain}" data-ip="{=ip}" title="备注:{=note} 更新时间:{=uptime}">
+            <td><a class="host-status {=status_class}" data-status="{=status}" data-id="{=id}" data-domain="{=domain}" href="#"></a></td>
+			<td>{=ip}</td>
+            <td>{=domain}</td>
+            <td class="tags">{=tags}</td>
+            <td class="note">{=note}</td>
+        </tr>
+    </script>
 </div>
-
-<!-- Modal -->
-<div class="modal fade" id="dlg_add" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-
-            <div class="modal-body">
-                <ul id="add_tab" class="nav nav-tabs">
-                    <li><a href="#add" data-toggle="tab">添加</a></li>
-                    <li><a href="#add2" data-toggle="tab">批量添加</a></li>
-                </ul>
-                <div class="tab-content">
-                    <div class="tab-pane active" id="add">
-
-                        <form role="form" class="form-horizontal">
-                            <div class="form-group">
-                                <label for="ip" class="col-xs-2 control-label">ip</label>
-
-                                <div class="col-xs-8">
-                                    <input autocomplete="off" placeholder="请输入ip,比如:127.0.0.1" id="ip" list="ip-list"
-                                           class="form-control">
-
-                                </div>
-
-
-                            </div>
-
-                            <div class="form-group">
-                                <label for="domain" class="col-xs-2  control-label">域名</label>
-
-                                <div class="col-xs-8">
-                                    <input placeholder="请输入域名,比如:www.google.com" id="domain" list="domain-list"
-                                           class="form-control">
-                                </div>
-
-                            </div>
-                            <div class="form-group">
-                                <label for="note" class="col-xs-2  control-label">备注</label>
-
-                                <div class="col-xs-8">
-                                    <input placeholder="附加描述,可选" id="note" list="ip-list" class="form-control">
-                                </div>
-
-                            </div>
-
-                            <div class="form-group">
-                                <label class="col-xs-2  control-label">标签</label>
-                                <div class="col-xs-8" id="div_labels">
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="labels[]" value="prod">prod
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="labels[]" value="prod">dev
-                                    </label>
-                                    <label class="checkbox-inline">
-                                        <input type="checkbox" name="labels[]" value="test">test
-                                    </label>
-
-
-                                </div>
-
-
-                            </div>
-
-                            <div class="form-group">
-                                <label class="col-xs-2  control-label">自定义标签</label>
-                                <div class="col-xs-8">
-                                    <input type="text" id="add_labels" placeholder="自定义标签,分割,比如:test1,test-sdm,test-2" class="form-control">
-                                </div>
-                            </div>
-
-                        </form>
-                    </div>
-                    <div class="tab-pane active" id="add2">
-                      <!--   输入ip列表
-
-                        <textarea id="quick-add" disabled   placeholder="." class="form-control" style="height:200px"></textarea>
-                       	 开发中... -->
-                       	<form role="form" class="form-horizontal">
-                        	<textarea id="quick-add" placeholder="." class="form-control" style="height:200px"></textarea>
-	                    </form>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
-                <button type="button" id="but-save" class="btn btn-primary">确认保存</button>
-            </div>
-        </div>
-        <!-- /.modal-content -->
-    </div>
-    <!-- /.modal-dialog -->
-</div>
-<!-- /.modal -->
-
 
 </body>
 </html>
